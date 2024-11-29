@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+      <meta charset="utf-8">
+      <title>Lab 7</title>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+           crossorigin=""/>
+
+         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+           crossorigin=""></script>
+
+      <script src="https://code.jquery.com/jquery-3.3.1.min.js"
+        integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+        crossorigin="anonymous"></script>
+
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"
+        integrity="sha256-VazP97ZCwtekAsvgPBSUwPFKdrwD3unUfSGVYrahUqU="
+        crossorigin="anonymous"></script>
+
+      <style>
+          html, body { margin: 0; padding: 0; height: 100%; }
+          #map { min-height: 100%; }
+          
+          
+          .legend, .temporal-legend {
+   		padding: 6px 15px;
+    	font: 14px/16px Arial, Helvetica, sans-serif;
+   		background: white;
+    	background: rgba(255,255,255,0.8);
+    	box-shadow: 0 0 15px rgba(0,0,0,0.2);
+    	border-radius: 5px;
+	}
+	#legendTitle {
+  	  	text-align: center;
+   	 	margin-bottom: 15px;
+   		font-variant: small-caps;
+	}
+	.symbolsContainer {
+    	float: left;
+		margin-left: 50px;
+	}
+	.legendCircle {
+     	border-radius:50%; 
+     	border: 2px solid #501e65; 
+     	background: rgba(80, 30, 101, .5);
+	 	display: inline-block;
+	}
+	.legendValue {
+    	position: absolute;
+    	right: 8px;
+	}
+                               
+
+      </style>
+  </head>
+
+  <body>
+      <div id="map"></div>
+
+      <script>
+	  
+          var map = L.map('map', {
+                center: [38.1625228, -96.9633171],
+                zoom: 4
+            });
+
+         L.tileLayer('https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}.png', {
+           attribution: 'Map tiles by Carto, under CC BY 3.0. Data by OpenStreetMap, under ODbL.', //tl
+           maxZoom: 11,
+           minZoom: 4
+         }).addTo(map);
+
+          //change the file name to yours
+            $.getJSON("https://raw.githubusercontent.com/neiugis/lab7/gh-pages/map/map7_legend.html")  // The getJSON() method is used to get JSON data
+            .done(function(data) {
+                var info = processData(data);
+                createPropSymbols(info.timestamps, data);
+                createSliderUI(info.timestamps);
+                 createLegend(info.min,info.max);
+            });
+
+          function processData(data) {
+              // First, initialize the variables to hold the timestamps and min/max population values
+              var timestamps = [];  // square brackets to define an array of data
+                                    // because there are multiple timestamps
+              var	min = Infinity; // for the min, begin with the largest possible value - infinity
+              var	max = -Infinity;// for the max, begin with the smallest possible value - negative infinity
+
+              // Go through each row/feature of the data table
+              // Note data is the variable name in the function definition - processData(data)
+              for (var feature in data.features) {
+                  var properties = data.features[feature].properties;
+
+                  // At each row, go through the columns/attributes to get the values
+                  for (var attribute in properties) {
+                      if ( attribute != 'id' &&
+                           attribute != 'name' &&
+                           attribute != 'latitude' &&
+                           attribute != 'longitude' )   // != means NOT EQUAL TO
+                                                  // These three columns are NOT recorded
+                                                  // Modify this part when mapping your own data
+                      {
+                          if ( $.inArray(attribute,timestamps) ===  -1) { // JQuery in.Array() method searches for a specified value within an array and return its index (or -1 if not found)
+                                                            // here, the new timestamp is only added when it is not already in the array
+                                                            // triple equals === compares both type and value
+
+                              timestamps.push(attribute);  // The JS push() method adds new items to the end of an array
+                                                           // and returns the new length of the array
+                          }
+                          if (properties[attribute] < min) {
+                              min = properties[attribute]; // record/update the current smaller values as the min
+                          }
+                          if (properties[attribute] > max) {
+                              max = properties[attribute]; // record/update the current larger values as the max
+                          }
+                      }
+                  }
+              }
+              return {
+                  timestamps : timestamps,
+                  min : min,
+                  max : max
+              }
+            }
+
+          // The function to draw the proportional symbols
+            function createPropSymbols(timestamps, data) {
+
+              cities = L.geoJson(data, {
+
+                  // By default, Leaflet draws geojson points as simple markers
+                  // To alter this, the pointToLayer function needs to be used
+                  pointToLayer: function(feature, latlng) {
+                      return L.circleMarker(latlng, { // we use circle marker for the points
+                          fillColor: "#501e65",  // fill color of the circles
+                          color: '#501e65',      // border color of the circles
+                          weight: 2,             // circle line weight in pixels
+                          fillOpacity: 0.5       // fill opacity (0-1)
+                      }).on({
+                          mouseover: function(e) {
+                                this.openPopup();
+                                this.setStyle({fillColor: 'green'});  // fill color turns green when mouseover
+                            },
+                            mouseout: function(e) {
+                                this.closePopup();
+                                this.setStyle({fillColor: '#501e65'});  // fill turns original color when mouseout
+                            }
+                    });
+                  }
+              }).addTo(map);
+
+              updatePropSymbols(timestamps[0]); // this function is defined below
+                                              // When loaded, the map will first show proportional symbols with the first timestamp's data
+            }
+
+            // The function to update/resize each circle marker according to a value in the time series
+            function updatePropSymbols(timestamp) {
+
+              cities.eachLayer(function(layer) {  // eachLayer() is an Leaflet function to iterate over the layers/points of the map
+
+                  var props = layer.feature.properties;   // attributes
+                  var radius = calcPropRadius(props[timestamp]); // circle radius, calculation function defined below
+
+                  // pop-up information (when mouseover) for each city is also defined here
+                  var popupContent = props.name + ' ' + timestamp + ' population: ' + String(props[timestamp]);
+
+                  layer.setRadius(radius);  // Leaflet method for setting the radius of a circle
+                  layer.bindPopup(popupContent, { offset: new L.Point(0,-radius) }); // bind the popup content, with an offset
+              });
+            }
+
+            // calculate the radius of the proportional symbols based on area
+            function calcPropRadius(attributeValue) {
+
+              var scaleFactor = 0.001;   // the scale factor is used to scale the values; the units of the radius are in meters, tl
+                                         // you may determine the scale factor accordingly based on the range of the values and the mapping scale
+              var area = attributeValue * scaleFactor;
+
+              return Math.sqrt(area/Math.PI);  // the function return the radius of the circle to be used in the updatePropSymbols()
+            }
+
+          function createSliderUI(timestamps) {
+
+          var sliderControl = L.control({ position: 'bottomleft'} ); // position of the slider
+                              // Another use of L.control :)
+
+          sliderControl.onAdd = function(map) {
+              var slider = L.DomUtil.create("input", "range-slider");
+              L.DomEvent.addListener(slider, 'mousedown', function(e) {
+                  L.DomEvent.stopPropagation(e);
+              });
+
+              $(slider)
+                  .attr({'type':'range', 'max': timestamps[timestamps.length-1], 'min':timestamps[0], 'step': 10,'value': String(timestamps[0])})
+                  .on('input change', function() {
+                      updatePropSymbols($(this).val().toString()); // update the map with slider
+                      $(".temporal-legend").text(this.value); // update the label with slider
+                  });
+              return slider;
+          }
+
+          sliderControl.addTo(map);
+          createTimeLabel(timestamps[0]);
+        }
+
+
+        // add labels to the time slider
+        function createTimeLabel(startTimestamp) {
+          var temporalLegend = L.control({position: 'bottomleft' }); // same position as the slider
+                               // One more use of L.control !!
+
+          temporalLegend.onAdd = function(map) {
+              var output = L.DomUtil.create("output", "temporal-legend");
+              return output;
+          }
+          temporalLegend.addTo(map);
+          $(".temporal-legend").text(startTimestamp); //display the first year by default
+        }
+          
+              
+function createLegend(min, max) {
+		 
+		if (min < 10) {	
+			min = 10; 
+		}
+
+        		function roundNumber(inNumber) {
+
+				return (Math.round(inNumber/10) * 10);  
+		}
+        
+		var legend = L.control( { position: 'bottomright'} );
+
+		legend.onAdd = function(map) {
+
+		var legendContainer = L.DomUtil.create("div", "legend");  
+		var symbolsContainer = L.DomUtil.create("div", "symbolsContainer");
+		var classes = [roundNumber(min), roundNumber((max-min)/2), roundNumber(max)]; 
+		var legendCircle;  
+		var lastRadius = 0;
+		var currentRadius;
+		var margin;
+
+		L.DomEvent.addListener(legendContainer, 'mousedown', function(e) { 
+			L.DomEvent.stopPropagation(e); 
+		});  
+
+		$(legendContainer).append("<h2 id='legendTitle'>Total Population</h2>");
+		
+		for (var i = 0; i <= classes.length-1; i++) {  
+
+			legendCircle = L.DomUtil.create("div", "legendCircle");  
+			
+			currentRadius = calcPropRadius(classes[i]);
+			
+			margin = -currentRadius - lastRadius - 5;
+
+			$(legendCircle).attr("style", "width: " + currentRadius*2 + 
+				"px; height: " + currentRadius*2 + 
+				"px; margin-left: " + margin + "px" );				
+			$(legendCircle).append("<span class='legendValue'>"+classes[i]+"</span>");
+
+			$(symbolsContainer).append(legendCircle);
+
+			lastRadius = currentRadius;
+
+		}
+
+		$(legendContainer).append(symbolsContainer); 
+
+		return legendContainer; //tl
+
+		};
+
+		legend.addTo(map);  
+}
+                        
+
+      </script>
+
+  </body>
+</html>
